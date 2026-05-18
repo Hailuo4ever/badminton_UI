@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 .pnpm-store
+.wrangler-config
 dist
 dist-ssr
 *.local
