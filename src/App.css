@@ -479,7 +479,7 @@
 }
 
 .setup-phase--tracing .machine-runner {
-  animation: setup-runner-trace 15s linear infinite;
+  animation: setup-runner-trace 7.1s linear infinite;
 }
 
 .setup-phase--confirm .machine-runner {
@@ -951,13 +951,6 @@
 
 .demo-play-button:disabled svg {
   animation: soft-spin 1s linear infinite;
-}
-
-.is-emergency-paused .scan-sweep.is-scanning,
-.is-emergency-paused .flying-shuttle,
-.is-emergency-paused .steam-cloud.is-steaming i,
-.is-emergency-paused .voice-wave i {
-  animation-play-state: paused;
 }
 
 .demo-readout {
@@ -1837,12 +1830,18 @@
 }
 
 .emergency-fab:hover,
-.emergency-fab:focus-visible,
-.emergency-fab.is-active {
+.emergency-fab:focus-visible {
   background: rgba(255, 180, 171, 0.2);
   outline: none;
   transform: translateY(1px);
   box-shadow: 0 0 25px rgba(255, 180, 171, 0.6);
+}
+
+.emergency-fab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: 0 0 12px rgba(255, 180, 171, 0.08);
 }
 
 .emergency-fab svg {

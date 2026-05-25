@@ -64,7 +64,7 @@ const DEMO_GOOD_TARGET = 38
 const DEMO_BAD_TARGET = 4
 const DEMO_BUCKET_LIMIT = 10
 const SETUP_TRACE_PROGRESS_STEP = 4
-const SETUP_TRACE_STEP_MS = 900
+const SETUP_TRACE_STEP_MS = 400
 const SETUP_TRACE_COMPLETE_DELAY_MS = 700
 const BAD_BALL_NUMBERS = new Set([8, 17, 29, 39])
 const STORAGE_KEY = 'badminton.workAreaSetup.v1'
@@ -664,14 +664,13 @@ function WorkAreaSetupScreen({ onComplete }: WorkAreaSetupScreenProps) {
 }
 
 function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
-  const dashboardRef = useRef<HTMLDivElement>(null)
-  const pausedPlaybackRef = useRef<Animation[]>([])
+  const preDemoControlRef = useRef<ControlId>('collect')
   const [activeControl, setActiveControl] = useState<ControlId>('collect')
-  const [emergency, setEmergency] = useState(false)
   const [demoPhase, setDemoPhase] = useState<DemoPhase>('idle')
   const [demoStep, setDemoStep] = useState(0)
   const [wheelTurns, setWheelTurns] = useState(0)
   const [hasRotated, setHasRotated] = useState(false)
+  const [waterDepleted, setWaterDepleted] = useState(false)
 
   const isDemoActive = demoPhase !== 'idle'
   const isDemoRunning = isDemoActive && demoPhase !== 'summary'
@@ -709,61 +708,11 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
       ? 45
       : 0
   const humidityValue = hasReachedPhase(demoPhase, 'steaming') ? 65 : 55
-  const lowWaterWarning = demoPhase === 'warning' || emergency
+  const lowWaterWarning = waterDepleted
   const setupConfidence = setupResult?.boundaryConfidence ?? 98
   const setupCoverage = setupResult?.coveragePercent ?? 100
 
   useEffect(() => {
-    const playbackSelectors = [
-      '.scan-sweep',
-      '.flying-shuttle',
-      '.steam-cloud i',
-      '.voice-wave i',
-      '.cage-slot',
-      '.cage-hub',
-      '.telemetry-fill',
-    ].join(',')
-
-    if (!emergency) {
-      pausedPlaybackRef.current.forEach((animation) => {
-        try {
-          animation.play()
-        } catch {
-          // Ignore animations that have been removed while the emergency state was active.
-        }
-      })
-      pausedPlaybackRef.current = []
-
-      return undefined
-    }
-
-    const root = dashboardRef.current
-
-    if (!root) {
-      return undefined
-    }
-
-    const animations = Array.from(root.querySelectorAll(playbackSelectors))
-      .flatMap((element) => element.getAnimations())
-      .filter((animation) => animation.playState !== 'finished')
-
-    animations.forEach((animation) => {
-      try {
-        animation.pause()
-      } catch {
-        // Some short-lived transitions may finish between collection and pause.
-      }
-    })
-    pausedPlaybackRef.current = animations
-
-    return undefined
-  }, [emergency])
-
-  useEffect(() => {
-    if (emergency) {
-      return undefined
-    }
-
     if (demoPhase === 'voice-command') {
       const timer = window.setTimeout(() => setDemoPhase('scanning'), 900)
 
@@ -828,7 +777,10 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
     }
 
     if (demoPhase === 'voice-report') {
-      const timer = window.setTimeout(() => setDemoPhase('warning'), 2200)
+      const timer = window.setTimeout(() => {
+        setWaterDepleted(true)
+        setDemoPhase('warning')
+      }, 2200)
 
       return () => window.clearTimeout(timer)
     }
@@ -840,13 +792,9 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
     }
 
     return undefined
-  }, [demoPhase, demoStep, emergency, hasRotated])
+  }, [demoPhase, demoStep, hasRotated])
 
   const currentStatus = useMemo(() => {
-    if (emergency) {
-      return '急停保护'
-    }
-
     if (demoPhase === 'voice-command') {
       return '语音唤醒'
     }
@@ -888,7 +836,7 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
     }
 
     return '4号仓运行'
-  }, [demoPhase, demoStep, emergency])
+  }, [demoPhase, demoStep])
 
   const demoStatus = useMemo(() => {
     if (demoPhase === 'idle') {
@@ -1061,17 +1009,7 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
     },
   ]
 
-  const startDemo = () => {
-    setEmergency(false)
-    setActiveControl('collect')
-    setDemoStep(0)
-    setWheelTurns(0)
-    setHasRotated(false)
-    setDemoPhase('voice-command')
-  }
-
-  const stopDemoForManualControl = (controlId: ControlId) => {
-    setEmergency(false)
+  const resetDemoPlayback = (controlId: ControlId) => {
     setDemoPhase('idle')
     setDemoStep(0)
     setWheelTurns(0)
@@ -1079,11 +1017,29 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
     setActiveControl(controlId)
   }
 
+  const startDemo = () => {
+    preDemoControlRef.current = activeControl
+    setWaterDepleted(false)
+    setActiveControl('collect')
+    setDemoStep(0)
+    setWheelTurns(0)
+    setHasRotated(false)
+    setDemoPhase('voice-command')
+  }
+
+  const stopDemo = () => {
+    setWaterDepleted(false)
+    resetDemoPlayback(preDemoControlRef.current)
+  }
+
+  const stopDemoForManualControl = (controlId: ControlId) => {
+    preDemoControlRef.current = controlId
+    setWaterDepleted(false)
+    resetDemoPlayback(controlId)
+  }
+
   return (
-    <div
-      className={`dashboard-root ${emergency ? 'is-emergency-paused' : ''}`}
-      ref={dashboardRef}
-    >
+    <div className="dashboard-root">
       <header className="top-app-bar">
         <button className="icon-button" type="button" aria-label="打开菜单">
           <Icon name="menu" />
@@ -1168,10 +1124,10 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
         </section>
 
         <button
-          className={`emergency-fab ${emergency ? 'is-active' : ''}`}
+          className="emergency-fab"
           type="button"
-          aria-pressed={emergency}
-          onClick={() => setEmergency((isEmergency) => !isEmergency)}
+          onClick={stopDemo}
+          disabled={!isDemoActive}
         >
           <Icon name="warning" />
           <span>紧急停止</span>
