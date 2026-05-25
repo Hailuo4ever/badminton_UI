@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 type ControlId = 'collect' | 'sort' | 'steam'
@@ -14,6 +14,13 @@ type DemoPhase =
   | 'voice-report'
   | 'warning'
   | 'summary'
+type AppStage = 'setup' | 'dashboard'
+type SetupPhase = 'idle' | 'detecting' | 'tracing' | 'confirm'
+type WorkAreaSetupResult = {
+  completedAt: string
+  boundaryConfidence: number
+  coveragePercent: number
+}
 type IconName =
   | 'air'
   | 'arrow-up'
@@ -43,11 +50,24 @@ type IconProps = {
   className?: string
 }
 
+type WorkAreaSetupScreenProps = {
+  onComplete: (result: WorkAreaSetupResult) => void
+}
+
+type DashboardScreenProps = {
+  setupResult: WorkAreaSetupResult | null
+  onResetSetup: () => void
+}
+
 const DEMO_TOTAL = 42
 const DEMO_GOOD_TARGET = 38
 const DEMO_BAD_TARGET = 4
 const DEMO_BUCKET_LIMIT = 10
+const SETUP_TRACE_PROGRESS_STEP = 4
+const SETUP_TRACE_STEP_MS = 900
+const SETUP_TRACE_COMPLETE_DELAY_MS = 700
 const BAD_BALL_NUMBERS = new Set([8, 17, 29, 39])
+const STORAGE_KEY = 'badminton.workAreaSetup.v1'
 
 const controlItems: Array<{
   id: ControlId
@@ -151,6 +171,47 @@ const timelineItems: Array<{
   { label: '数据总结', icon: 'check', order: 8 },
 ]
 
+const setupPhaseContent: Record<
+  SetupPhase,
+  {
+    title: string
+    detail: string
+    cameraStatus: string
+    icon: IconName
+  }
+> = {
+  idle: {
+    title: '首次使用前，请先设定工作区域',
+    detail: '机器将识别场地边界，并沿边缘完成一圈巡线校准。',
+    cameraStatus: '等待开始',
+    icon: 'grid',
+  },
+  detecting: {
+    title: '正在识别场地边界',
+    detail: '摄像头锁定四角、网线与安全边界，准备生成巡线路径。',
+    cameraStatus: '边界识别中',
+    icon: 'radar',
+  },
+  tracing: {
+    title: '机器正在自动巡线',
+    detail: '沿设定边界低速巡航，校验可通行区域与拾球覆盖范围。',
+    cameraStatus: '自动巡线中',
+    icon: 'sync',
+  },
+  confirm: {
+    title: '工作区域已锁定',
+    detail: '边界置信度 98%，覆盖率 100%。确认后进入主控制界面。',
+    cameraStatus: '校准完成',
+    icon: 'check',
+  },
+}
+
+const setupSteps = [
+  { label: '边界识别', detail: '锁定四角' },
+  { label: '自动巡线', detail: '校验路径' },
+  { label: '区域锁定', detail: '保存设置' },
+]
+
 const badIssueLabels = ['毛片破损', '球头变形', '重量异常', '飞行不稳']
 
 function countBadBalls(step: number) {
@@ -160,6 +221,62 @@ function countBadBalls(step: number) {
 
 function hasReachedPhase(currentPhase: DemoPhase, targetPhase: DemoPhase) {
   return phaseOrder[currentPhase] >= phaseOrder[targetPhase]
+}
+
+function readStoredSetupResult(): WorkAreaSetupResult | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawResult = window.localStorage.getItem(STORAGE_KEY)
+
+    if (!rawResult) {
+      return null
+    }
+
+    const parsedResult = JSON.parse(rawResult) as Partial<WorkAreaSetupResult>
+
+    if (
+      typeof parsedResult.completedAt === 'string' &&
+      typeof parsedResult.boundaryConfidence === 'number' &&
+      typeof parsedResult.coveragePercent === 'number'
+    ) {
+      return {
+        completedAt: parsedResult.completedAt,
+        boundaryConfidence: parsedResult.boundaryConfidence,
+        coveragePercent: parsedResult.coveragePercent,
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function saveStoredSetupResult(result: WorkAreaSetupResult) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(result))
+  } catch {
+    // The in-memory React state still lets the flow finish for this session.
+  }
+}
+
+function clearStoredSetupResult() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // Ignore storage failures and keep the reset in session state.
+  }
 }
 
 function Icon({ name, className }: IconProps) {
@@ -356,7 +473,199 @@ function Icon({ name, className }: IconProps) {
   }
 }
 
-function App() {
+function WorkAreaSetupScreen({ onComplete }: WorkAreaSetupScreenProps) {
+  const [setupPhase, setSetupPhase] = useState<SetupPhase>('idle')
+  const [setupProgress, setSetupProgress] = useState(0)
+  const activeStepIndex =
+    setupPhase === 'idle'
+      ? -1
+      : setupPhase === 'detecting'
+        ? 0
+        : setupPhase === 'tracing'
+          ? 1
+          : 2
+  const isSetupRunning = setupPhase === 'detecting' || setupPhase === 'tracing'
+  const primaryButtonLabel =
+    setupPhase === 'idle'
+      ? '开始设定'
+      : setupPhase === 'confirm'
+        ? '确认工作区域'
+        : '巡线中'
+  const progressLabel =
+    setupPhase === 'idle' ? '待开始' : `${Math.round(setupProgress)}%`
+
+  useEffect(() => {
+    if (setupPhase !== 'detecting') {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setSetupProgress(36)
+      setSetupPhase('tracing')
+    }, 900)
+
+    return () => window.clearTimeout(timer)
+  }, [setupPhase])
+
+  useEffect(() => {
+    if (setupPhase !== 'tracing') {
+      return undefined
+    }
+
+    if (setupProgress >= 100) {
+      const timer = window.setTimeout(
+        () => setSetupPhase('confirm'),
+        SETUP_TRACE_COMPLETE_DELAY_MS,
+      )
+
+      return () => window.clearTimeout(timer)
+    }
+
+    const timer = window.setTimeout(() => {
+      setSetupProgress((progress) =>
+        Math.min(progress + SETUP_TRACE_PROGRESS_STEP, 100),
+      )
+    }, SETUP_TRACE_STEP_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [setupPhase, setupProgress])
+
+  const handlePrimaryAction = () => {
+    if (setupPhase === 'idle') {
+      setSetupProgress(18)
+      setSetupPhase('detecting')
+
+      return
+    }
+
+    if (setupPhase === 'confirm') {
+      onComplete({
+        completedAt: new Date().toISOString(),
+        boundaryConfidence: 98,
+        coveragePercent: 100,
+      })
+    }
+  }
+
+  return (
+    <div className="dashboard-root setup-root">
+      <header className="top-app-bar setup-app-bar">
+        <span className="icon-button icon-button--static" aria-hidden="true">
+          <Icon name="radar" />
+        </span>
+        <h1>设定工作区域</h1>
+        <span className="icon-button icon-button--static" aria-hidden="true">
+          <Icon name={setupPhaseContent[setupPhase].icon} />
+        </span>
+      </header>
+
+      <main className="setup-main" aria-label="首次工作区域设定">
+        <section className="setup-status-panel" aria-live="polite">
+          <div className="setup-phase-icon">
+            <Icon name={setupPhaseContent[setupPhase].icon} />
+          </div>
+          <div className="setup-status-copy">
+            <strong>{setupPhaseContent[setupPhase].title}</strong>
+            <span>{setupPhaseContent[setupPhase].detail}</span>
+          </div>
+        </section>
+
+        <section className="setup-camera-panel" aria-labelledby="setup-camera-title">
+          <div className="camera-status-row">
+            <h2 id="setup-camera-title">机器摄像头</h2>
+            <span>{setupPhaseContent[setupPhase].cameraStatus}</span>
+          </div>
+
+          <div
+            className={`camera-feed setup-phase--${setupPhase}`}
+            aria-label={`摄像头画面：${setupPhaseContent[setupPhase].cameraStatus}`}
+          >
+            <div className="camera-grid" aria-hidden="true" />
+            <div className="camera-vignette" aria-hidden="true" />
+            <div className="court-outline" aria-hidden="true">
+              <i className="court-line court-line--net" />
+              <i className="court-line court-line--left-service" />
+              <i className="court-line court-line--right-service" />
+              <i className="court-line court-line--middle" />
+            </div>
+            <div className="work-boundary" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            <div className="trace-path" aria-hidden="true">
+              <i />
+            </div>
+            <div className="scan-band" aria-hidden="true" />
+            <div className="camera-corner camera-corner--top-left" />
+            <div className="camera-corner camera-corner--top-right" />
+            <div className="camera-corner camera-corner--bottom-left" />
+            <div className="camera-corner camera-corner--bottom-right" />
+            <span className="detected-ball detected-ball--one" />
+            <span className="detected-ball detected-ball--two" />
+            <span className="detected-ball detected-ball--three" />
+            <span className="detected-ball detected-ball--four" />
+            <span className="machine-runner">
+              <Icon name="radar" />
+            </span>
+            <div className="camera-readout">
+              <span>CAM-01</span>
+              <strong>{progressLabel}</strong>
+            </div>
+          </div>
+
+          <div className="setup-progress" aria-label={`设定进度 ${progressLabel}`}>
+            <i style={{ width: `${setupProgress}%` }} />
+          </div>
+        </section>
+
+        <section className="setup-action-panel" aria-label="设定步骤">
+          <div className="setup-steps">
+            {setupSteps.map((step, index) => {
+              const stepState =
+                index < activeStepIndex
+                  ? 'is-done'
+                  : index === activeStepIndex
+                    ? 'is-current'
+                    : ''
+
+              return (
+                <div className={`setup-step ${stepState}`} key={step.label}>
+                  <span>{index + 1}</span>
+                  <strong>{step.label}</strong>
+                  <small>{step.detail}</small>
+                </div>
+              )
+            })}
+          </div>
+
+          <button
+            className="setup-primary-button"
+            type="button"
+            onClick={handlePrimaryAction}
+            disabled={isSetupRunning}
+          >
+            <Icon
+              name={
+                isSetupRunning
+                  ? 'sync'
+                  : setupPhase === 'confirm'
+                    ? 'check'
+                    : 'play'
+              }
+            />
+            <span>{primaryButtonLabel}</span>
+          </button>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
+  const dashboardRef = useRef<HTMLDivElement>(null)
+  const pausedPlaybackRef = useRef<Animation[]>([])
   const [activeControl, setActiveControl] = useState<ControlId>('collect')
   const [emergency, setEmergency] = useState(false)
   const [demoPhase, setDemoPhase] = useState<DemoPhase>('idle')
@@ -401,6 +710,54 @@ function App() {
       : 0
   const humidityValue = hasReachedPhase(demoPhase, 'steaming') ? 65 : 55
   const lowWaterWarning = demoPhase === 'warning' || emergency
+  const setupConfidence = setupResult?.boundaryConfidence ?? 98
+  const setupCoverage = setupResult?.coveragePercent ?? 100
+
+  useEffect(() => {
+    const playbackSelectors = [
+      '.scan-sweep',
+      '.flying-shuttle',
+      '.steam-cloud i',
+      '.voice-wave i',
+      '.cage-slot',
+      '.cage-hub',
+      '.telemetry-fill',
+    ].join(',')
+
+    if (!emergency) {
+      pausedPlaybackRef.current.forEach((animation) => {
+        try {
+          animation.play()
+        } catch {
+          // Ignore animations that have been removed while the emergency state was active.
+        }
+      })
+      pausedPlaybackRef.current = []
+
+      return undefined
+    }
+
+    const root = dashboardRef.current
+
+    if (!root) {
+      return undefined
+    }
+
+    const animations = Array.from(root.querySelectorAll(playbackSelectors))
+      .flatMap((element) => element.getAnimations())
+      .filter((animation) => animation.playState !== 'finished')
+
+    animations.forEach((animation) => {
+      try {
+        animation.pause()
+      } catch {
+        // Some short-lived transitions may finish between collection and pause.
+      }
+    })
+    pausedPlaybackRef.current = animations
+
+    return undefined
+  }, [emergency])
 
   useEffect(() => {
     if (emergency) {
@@ -723,7 +1080,10 @@ function App() {
   }
 
   return (
-    <div className="dashboard-root">
+    <div
+      className={`dashboard-root ${emergency ? 'is-emergency-paused' : ''}`}
+      ref={dashboardRef}
+    >
       <header className="top-app-bar">
         <button className="icon-button" type="button" aria-label="打开菜单">
           <Icon name="menu" />
@@ -746,6 +1106,19 @@ function App() {
             <Icon name="water" />
             <span>{lowWaterWarning ? '缺水警告' : '水位正常'}</span>
           </div>
+        </section>
+
+        <section className="workspace-lock-strip" aria-label="工作区域设定状态">
+          <div>
+            <Icon name="target" />
+            <span>工作区已锁定</span>
+            <strong>
+              覆盖率 {setupCoverage}% · 置信度 {setupConfidence}%
+            </strong>
+          </div>
+          <button type="button" onClick={onResetSetup}>
+            重新设定
+          </button>
         </section>
 
         <section className="control-grid" aria-label="主控制">
@@ -798,15 +1171,7 @@ function App() {
           className={`emergency-fab ${emergency ? 'is-active' : ''}`}
           type="button"
           aria-pressed={emergency}
-          onClick={() => {
-            const nextEmergency = !emergency
-            setEmergency(nextEmergency)
-            if (nextEmergency) {
-              setDemoPhase('idle')
-              setDemoStep(0)
-              setHasRotated(false)
-            }
-          }}
+          onClick={() => setEmergency((isEmergency) => !isEmergency)}
         >
           <Icon name="warning" />
           <span>紧急停止</span>
@@ -950,18 +1315,20 @@ function App() {
           </div>
         </section>
 
-        <section className="panel stats-panel" aria-labelledby="stats-title">
-          <div className="panel-title-row panel-title-row--stacked">
-            <h2 id="stats-title">拾球统计</h2>
+        <section className="panel insights-panel" aria-labelledby="insights-title">
+          <div className="panel-title-row insights-title-row">
+            <h2 id="insights-title">统计 // 联动</h2>
+            <span>{phaseNarration.title}</span>
           </div>
 
-          <div className="stats-body">
-            <div className="stat-number-row">
+          <div className="insights-body">
+            <div className="insight-total">
+              <span>拾球总数</span>
               <strong>{demoTotalCount}</strong>
               <Icon name="arrow-up" />
             </div>
 
-            <div className="ratio-block">
+            <div className="insight-ratio">
               <div className="ratio-labels">
                 <span className="good-label">好球 ({demoGoodCount})</span>
                 <span className="bad-label">坏球 ({demoBadCount})</span>
@@ -976,6 +1343,24 @@ function App() {
                   style={{ width: `${100 - goodRatio}%` }}
                 />
               </div>
+            </div>
+
+            <div className="compact-telemetry-list">
+              {telemetryItems.map((item) => (
+                <div className="compact-telemetry-card" key={item.label}>
+                  <div className={`telemetry-icon telemetry-icon--${item.tone}`}>
+                    <Icon name={item.icon} />
+                  </div>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <div className="telemetry-bar" aria-hidden="true">
+                    <i
+                      className={`telemetry-fill telemetry-fill--${item.tone}`}
+                      style={{ width: `${item.progress}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="metric-capsules" aria-label="本轮关键指标">
@@ -1000,37 +1385,43 @@ function App() {
             </div>
           </div>
         </section>
-
-        <section className="panel telemetry-panel" aria-labelledby="telemetry-title">
-          <div className="panel-title-row">
-            <h2 id="telemetry-title">设备联动</h2>
-            <span>{phaseNarration.title}</span>
-          </div>
-
-          <div className="telemetry-list">
-            {telemetryItems.map((item) => (
-              <div className="telemetry-row" key={item.label}>
-                <div className={`telemetry-icon telemetry-icon--${item.tone}`}>
-                  <Icon name={item.icon} />
-                </div>
-                <div className="telemetry-copy">
-                  <div>
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                  </div>
-                  <div className="telemetry-bar" aria-hidden="true">
-                    <i
-                      className={`telemetry-fill telemetry-fill--${item.tone}`}
-                      style={{ width: `${item.progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
     </div>
+  )
+}
+
+function App() {
+  const [initialSetupResult] = useState<WorkAreaSetupResult | null>(() =>
+    readStoredSetupResult(),
+  )
+  const [setupResult, setSetupResult] = useState<WorkAreaSetupResult | null>(
+    initialSetupResult,
+  )
+  const [appStage, setAppStage] = useState<AppStage>(() =>
+    initialSetupResult ? 'dashboard' : 'setup',
+  )
+
+  const completeSetup = (result: WorkAreaSetupResult) => {
+    saveStoredSetupResult(result)
+    setSetupResult(result)
+    setAppStage('dashboard')
+  }
+
+  const resetSetup = () => {
+    clearStoredSetupResult()
+    setSetupResult(null)
+    setAppStage('setup')
+  }
+
+  if (appStage === 'setup') {
+    return <WorkAreaSetupScreen onComplete={completeSetup} />
+  }
+
+  return (
+    <DashboardScreen
+      setupResult={setupResult}
+      onResetSetup={resetSetup}
+    />
   )
 }
 
