@@ -14,29 +14,6 @@
   box-shadow: 0 0 0 1px rgba(30, 41, 59, 0.65);
 }
 
-@media (min-width: 431px) and (max-width: 1024px) {
-  .dashboard-root {
-    /* Mobile desktop-mode viewports can report ~980px; scale the 430px demo to fill that viewport. */
-    zoom: calc(100vw / 430px);
-  }
-
-  @supports not (zoom: 1) {
-    .dashboard-root {
-      width: 430px;
-      min-height: calc(100svh / (100vw / 430px));
-      margin: 0;
-      transform: scale(calc(100vw / 430px));
-      transform-origin: top left;
-    }
-
-    .top-app-bar {
-      left: 0;
-      width: 430px;
-      transform: none;
-    }
-  }
-}
-
 .dashboard-root svg {
   display: block;
   width: 1em;
