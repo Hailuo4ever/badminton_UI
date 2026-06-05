@@ -82,7 +82,7 @@
 }
 
 .icon-button--static {
-  color: var(--primary);
+  color: #64748b;
   pointer-events: none;
 }
 
@@ -957,7 +957,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .demo-readout strong {
@@ -967,11 +967,26 @@
   line-height: 18px;
 }
 
-.demo-readout span {
+.demo-chip-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.demo-chip-row span {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  padding: 2px 6px;
+  border: 1px solid rgba(71, 85, 105, 0.82);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.24);
   color: #94a3b8;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 15px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 12px;
+  white-space: nowrap;
 }
 
 .workflow-panel {
@@ -1068,20 +1083,14 @@
 
 .timeline-rail {
   display: grid;
-  grid-template-columns: repeat(9, 44px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-
-.timeline-rail::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .timeline-step {
   display: flex;
-  height: 42px;
+  height: 40px;
   min-width: 0;
   flex-direction: column;
   align-items: center;
@@ -1198,9 +1207,9 @@
   position: relative;
   display: flex;
   width: 100%;
-  max-width: 232px;
+  max-width: clamp(214px, 64vw, 232px);
   aspect-ratio: 23 / 24;
-  min-height: 206px;
+  min-height: 0;
   height: auto;
   align-items: center;
   justify-content: center;
@@ -1214,7 +1223,7 @@
 
 .scan-sweep {
   position: absolute;
-  inset: -30%;
+  inset: 0;
   z-index: 2;
   background:
     conic-gradient(
@@ -1254,14 +1263,14 @@
 }
 
 .cage-ring--near {
-  inset: -14px;
+  inset: 5px;
   border: 2px solid rgba(75, 226, 119, 0.3);
   opacity: 0.6;
   box-shadow: 0 0 15px rgba(75, 226, 119, 0.5);
 }
 
 .cage-ring--far {
-  inset: -35px;
+  inset: 18px;
   border: 1px solid rgba(75, 226, 119, 0.1);
   opacity: 0.3;
 }
@@ -1374,8 +1383,8 @@
 .cage-slot {
   top: 50%;
   left: 50%;
-  width: 46px;
-  height: 46px;
+  width: clamp(40px, 12vw, 46px);
+  height: clamp(40px, 12vw, 46px);
   border: 2px solid;
   transform: translate(-50%, -50%) rotate(var(--slot-angle))
     translateY(calc(var(--orbit-radius) * -1))
@@ -1443,8 +1452,8 @@
 .cage-hub {
   top: 50%;
   left: 50%;
-  width: 64px;
-  height: 64px;
+  width: clamp(54px, 17vw, 64px);
+  height: clamp(54px, 17vw, 64px);
   border: 3px solid var(--primary);
   background: var(--surface-variant);
   color: var(--primary);
@@ -1653,25 +1662,25 @@
 .compact-telemetry-card {
   display: grid;
   min-width: 0;
-  min-height: 70px;
-  grid-template-columns: 24px 1fr;
+  min-height: 68px;
+  grid-template-columns: 20px 1fr;
   align-content: center;
   align-items: center;
-  gap: 4px 6px;
-  padding: 8px;
+  gap: 3px 4px;
+  padding: 6px;
   border: 1px solid rgba(71, 85, 105, 0.82);
   border-radius: 8px;
   background: rgba(2, 6, 23, 0.28);
 }
 
 .compact-telemetry-card .telemetry-icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   grid-row: span 2;
 }
 
 .compact-telemetry-card .telemetry-icon svg {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .compact-telemetry-card span,

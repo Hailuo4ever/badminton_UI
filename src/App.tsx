@@ -1041,13 +1041,21 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
   return (
     <div className="dashboard-root">
       <header className="top-app-bar">
-        <button className="icon-button" type="button" aria-label="打开菜单">
-          <Icon name="menu" />
-        </button>
+        <span
+          className="icon-button icon-button--static"
+          aria-label="控制台总览"
+          role="img"
+        >
+          <Icon name="grid" />
+        </span>
         <h1>羽毛球捡球机</h1>
-        <button className="icon-button" type="button" aria-label="电量状态">
+        <span
+          className="icon-button icon-button--static"
+          aria-label="电量状态正常"
+          role="img"
+        >
           <Icon name="battery" />
-        </button>
+        </span>
       </header>
 
       <main className="dashboard-main" aria-label="羽毛球捡球机控制台">
@@ -1115,11 +1123,13 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
           </button>
           <div className="demo-readout">
             <strong>{demoStatus}</strong>
-            <span>
-              好球 {demoGoodCount}/{DEMO_GOOD_TARGET} · 坏球 {demoBadCount}/
-              {DEMO_BAD_TARGET} · 当前仓 {currentBucketFillCount}/
-              {DEMO_BUCKET_LIMIT}
-            </span>
+            <div className="demo-chip-row" aria-label="演示统计">
+              <span>好球 {demoGoodCount}/{DEMO_GOOD_TARGET}</span>
+              <span>坏球 {demoBadCount}/{DEMO_BAD_TARGET}</span>
+              <span>
+                当前仓 {currentBucketFillCount}/{DEMO_BUCKET_LIMIT}
+              </span>
+            </div>
           </div>
         </section>
 
@@ -1132,43 +1142,6 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
           <Icon name="warning" />
           <span>紧急停止</span>
         </button>
-
-        <section className="workflow-panel" aria-label="演示流程">
-          <div className="phase-narration">
-            <div className="phase-icon">
-              <Icon name={phaseNarration.icon} />
-            </div>
-            <div className="phase-copy">
-              <strong>{phaseNarration.title}</strong>
-              <span>{phaseNarration.detail}</span>
-            </div>
-            <div className="voice-wave" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
-
-          <div className="timeline-rail" aria-label="当前演示阶段">
-            {timelineItems.map((item) => {
-              const isCurrent = item.order === currentPhaseOrder
-              const isDone = item.order < currentPhaseOrder
-
-              return (
-                <div
-                  className={`timeline-step ${isCurrent ? 'is-current' : ''} ${
-                    isDone ? 'is-done' : ''
-                  }`}
-                  key={item.label}
-                >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
-                </div>
-              )
-            })}
-          </div>
-        </section>
 
         <section className="panel cage-panel" aria-labelledby="cage-title">
           <div className="panel-title-row">
@@ -1268,6 +1241,43 @@ function DashboardScreen({ setupResult, onResetSetup }: DashboardScreenProps) {
                 <Icon name="sync" />
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="workflow-panel" aria-label="演示流程">
+          <div className="phase-narration">
+            <div className="phase-icon">
+              <Icon name={phaseNarration.icon} />
+            </div>
+            <div className="phase-copy">
+              <strong>{phaseNarration.title}</strong>
+              <span>{phaseNarration.detail}</span>
+            </div>
+            <div className="voice-wave" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+          </div>
+
+          <div className="timeline-rail" aria-label="当前演示阶段">
+            {timelineItems.map((item) => {
+              const isCurrent = item.order === currentPhaseOrder
+              const isDone = item.order < currentPhaseOrder
+
+              return (
+                <div
+                  className={`timeline-step ${isCurrent ? 'is-current' : ''} ${
+                    isDone ? 'is-done' : ''
+                  }`}
+                  key={item.label}
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                </div>
+              )
+            })}
           </div>
         </section>
 
